@@ -15,10 +15,11 @@ election_2024 <- precinct_votes|>
 
 #calculating mean_median score 
 mean_median_score <- election_2024|>
-    mutate(prop = total_dem/ sum(total_dem + total_rep))|>
+    mutate(total = total_dem + total_rep)|>
+    mutate(prop = (total_dem/ total))|>
     summarize(mean_median = mean(prop) - median(prop))
 
-#calculating efficiency gap
+#calculating efficiency gap (EG)
 n_wasted <- function(by, against){
     w_threshold <- floor((by +against)/2) +1 
     n_wasted <- ifelse(by > against, by - w_threshold, by)
@@ -42,6 +43,21 @@ election_2024 |>
 ### 2024 Election Results and the proposed 2025 District Map
 
 ```{r}
+#calculating mean_median score 
+new_mean_median_score <- interp|>
+    mutate(total = DEMVOTE + REPVOTE)|>
+    mutate(prop = (DEMVOTE/ total))|>
+    summarize(mean_median = mean(prop) - median(prop))
 
+interp |>
+    mutate(
+    d_wasted = n_wasted(DEMVOTE, REPVOTE), r_wasted = n_wasted(REPVOTE, DEMVOTE) ) |>
+    summarize(
+        total_d_wasted = sum(d_wasted), 
+        total_r_wasted = sum(r_wasted), 
+        total_votes = sum(DEMVOTE, REPVOTE)
+    )|>
+    mutate(EG = (total_d_wasted - total_r_wasted)/total_votes)
 ```
+
 
