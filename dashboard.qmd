@@ -110,6 +110,7 @@ ggplot()+
 
 ```{r}
 #| include: false
+# map of new results after redistricting 
 mapping_2025 <- interp|>
     mutate(Party = ifelse(DEMVOTE > REPVOTE, "Democrat", "Republican"))
 ```
@@ -119,13 +120,13 @@ mapping_2025 <- interp|>
 ggplot()+
     geom_sf(data = mapping_2025, aes(fill= Party))+ 
     scale_fill_manual( values = c("Democrat" = "light blue", "Republican" = "red"))+
-    labs(title = "Proposed Congressional Results in 2025 w/ the Passing of Prop 50", fill = "Party Win")
+    labs(title = "Proposed Congressional Results in 2025 w/ the Passing of Proposition 50", fill = "Party Win")
 ```
 
 # Statistics
 ## Row 
 
-Seats Won By Democrats, Mean Median Score, Efficiency Gap in 2024
+Seats Won By Democrats, Mean Median Score, Efficiency Gap(EG) in 2024
 ```{r}
 #| echo: false
 
