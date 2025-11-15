@@ -1,5 +1,193 @@
 ---
-title: Dashboard
+title: Proposition 50 
 format: dashboard
 ---
 
+# Congressional Maps
+## Row 
+
+```{r}
+#| include: false
+
+# log all data for election_2025 data 
+library(tidyverse)
+library(sf)
+SR_vote_data <- read_csv("../Downloads/data/SR_Precinct_Votes.csv")
+SR_shapefiles <- st_read("../Downloads/data/shapefiles/SR_precinct_shapefiles")
+redistrict_data <- st_read("../Downloads/data/shapefiles/redistrict")
+
+#ensure same projection
+SR_shapefiles <- SR_shapefiles |>
+    st_transform(3310)|> # switch to equal area projection first
+    st_set_precision(1) |> # snap points to 1 m grid
+    st_make_valid() |> # fix self-intersections/bow-ties
+    st_collection_extract("POLYGON")
+
+#cleaning and combining SR_vote_data & SR_shapefiles 
+join_data <- SR_vote_data|>
+    select("SRPREC_KEY", "CDDIST", "CNGDEM01", "CNGDEM02", "CNGREP01", "CNGREP02")|>
+    mutate(CNGDEM01 = str_replace_all(CNGDEM01, "[\\*]+", "0"), CNGDEM02 = str_replace_all(CNGDEM02, "[\\*]+", "0"), 
+    CNGREP01 = str_replace_all(CNGREP01, "[\\*]+", "0"), CNGREP02 = str_replace_all(CNGREP02, "[\\*]+", "0"))|> #convert * to 0
+    drop_na()|> # remove NAs
+    mutate(CNGDEM01= as.numeric(CNGDEM01), CNGDEM02= as.numeric(CNGDEM02), CNGREP01= as.numeric(CNGREP01), CNGREP02= as.numeric(CNGREP02))|> #convert columns into numeric
+    left_join(SR_shapefiles, by= join_by(SRPREC_KEY == SRPREC_KEY))|>
+    mutate(DEMVOTE = sum(CNGDEM01, CNGDEM02), REPVOTE = sum(CNGREP01, CNGREP02))
+
+#cleaning redistrict data 
+redistrict_data <- redistrict_data|>
+    select(DISTRICT, geometry)
+
+#convert to join_data to sf 
+join_data_sf <- st_sf(geometry = join_data$geometry, DEMVOTE= join_data$DEMVOTE, REPVOTE = join_data$REPVOTE)
+
+#plot geometries 
+district_2024 <- plot(st_geometry(join_data_sf))
+district_2025 <- plot(st_geometry(redistrict_data))
+
+#ensuring same crs/ projection
+redistrict_data$geometry <- redistrict_data$geometry |>
+    st_transform(3310) |> # switch to equal area projection first
+    st_set_precision(1) |> # snap points to 1 m grid
+    st_make_valid() |> # fix self-intersections/bow-ties
+    st_collection_extract("POLYGON")
+
+#area interpolate 
+interp <- st_interpolate_aw(join_data_sf, redistrict_data, extensive = TRUE)
+interp
+
+```
+
+```{r}
+#| include: false
+
+# run all data again for election_2024 data 
+library(readxl)
+precinct_votes <- read_csv("data/g24_sov_by_g24_svprec.csv")
+# COUNTY, FIPS, CDIST, TOTVOTE, DEMVOTE, REPVOTE, CNGDEM01, CNGDEM02, CNGREP01,, CNGREP02
+district_votes <- read_excel("data/g24-results-by-district.xlsx")
+candidates <- read_csv("data/g24-candidates-by-district.csv")
+
+precinct_votes <- precinct_votes|>
+    select("COUNTY", "FIPS", "CDDIST", "TOTVOTE", "DEMVOTE", "REPVOTE",, "CNGDEM01", "CNGDEM02", "CNGREP01", "CNGREP02")|>
+    drop_na()|> # remove NAs
+    mutate(CNGDEM01= as.numeric(CNGDEM01),CNGDEM02= as.numeric(CNGDEM02), CNGREP01= as.numeric(CNGREP01), CNGREP02= as.numeric(CNGREP02)) 
+
+election_2024 <- precinct_votes|>
+    group_by(CDDIST)|>
+    drop_na()|>
+    summarize(total_dem = sum(CNGDEM01 + CNGDEM02), total_rep = sum(CNGREP01 + CNGREP02))|> #sum the total democratic and republican votes by district
+    slice(-1)
+```
+
+
+```{r}
+#| include: false
+
+#using the join_data, calculate which party wins 
+
+district_2024 <- st_read("../Downloads/2024_sh")
+
+mapping_2024 <- district_2024|>
+    mutate(CDDIST = 1:52)|>
+    full_join(election_2024)|>
+    select("CDDIST", "geometry", "total_dem", "total_rep")|>
+    mutate(Party = ifelse(total_dem > total_rep, "Democrat", "Republican"))
+
+#convert to sf 
+mapping_2024_sf <- st_sf(CDDIST = mapping_2024$CDDIST, geometry = mapping_2024$geometry, party = mapping_2024$Party)
+```
+
+```{r}
+#| echo: false
+ggplot()+
+    geom_sf(data = mapping_2024_sf, aes(fill= party))+ 
+    scale_fill_manual( values = c("Democrat" = "light blue", "Republican" = "red"))+
+    labs(title = "Congressional Results in 2024", fill = "Party Win")
+```
+
+
+## Row
+
+```{r}
+#| include: false
+mapping_2025 <- interp|>
+    mutate(Party = ifelse(DEMVOTE > REPVOTE, "Democrat", "Republican"))
+```
+
+```{r}
+#| echo: false
+ggplot()+
+    geom_sf(data = mapping_2025, aes(fill= Party))+ 
+    scale_fill_manual( values = c("Democrat" = "light blue", "Republican" = "red"))+
+    labs(title = "Proposed Congressional Results in 2025 w/ the Passing of Prop 50", fill = "Party Win")
+```
+
+# Statistics
+## Row 
+
+Seats Won By Democrats, Mean Median Score, Efficiency Gap in 2024
+```{r}
+#| echo: false
+
+#calculating mean_median score 
+election_2024|>
+    mutate(total = total_dem + total_rep)|>
+    mutate(prop = (total_dem/ total))|>
+    summarize(mean_median = mean(prop) - median(prop))
+
+# proportion won by democrats 
+election_2024|>
+    summarize(Democratic_seats_Won = sum(total_dem > total_rep))
+    
+#calculating efficiency gap
+n_wasted <- function(by, against){
+    w_threshold <- floor((by +against)/2) +1 
+    n_wasted <- ifelse(by > against, by - w_threshold, by)
+    n_wasted 
+}
+
+election_2024 |>
+    mutate(
+    d_wasted = n_wasted(total_dem, total_rep), 
+    r_wasted = n_wasted(total_rep, total_dem)
+    ) |>
+    summarize(
+        total_d_wasted = sum(d_wasted), 
+        total_r_wasted = sum(r_wasted), 
+        total_votes = sum(total_dem, total_rep)
+    )|>
+    mutate(EG = (total_d_wasted - total_r_wasted)/total_votes )
+```
+
+## Row
+Seats Won By Democrats, Mean Median Score, Efficiency Gap w/ Proposed Proposition 50 Redistricting
+```{r}
+#| echo: false
+#calculating mean_median score 
+interp|>
+    mutate(total = DEMVOTE + REPVOTE)|>
+    mutate(prop = (DEMVOTE/ total))|>
+    summarize(mean_median = mean(prop) - median(prop))
+
+#seats won by democrats 
+interp|>
+    summarize(Democratic_seats_Won = sum(DEMVOTE > REPVOTE))
+
+#EG
+interp |>
+    mutate(
+    d_wasted = n_wasted(DEMVOTE, REPVOTE), 
+    r_wasted = n_wasted(REPVOTE, DEMVOTE)
+    ) |>
+    summarize(
+        total_d_wasted = sum(d_wasted), 
+        total_r_wasted = sum(r_wasted), 
+        total_votes = sum(DEMVOTE, REPVOTE)
+    )|>
+    mutate(EG = (total_d_wasted - total_r_wasted)/total_votes )
+```
+
+# Methodology 
+::: {.card}
+I used data from the California Statewide website. I calculated the proposed redistricting wins by using area interpolation. Note that each of the statistics individually such as mean_median score and efficiency gap cannot tell the full story of gerrymandering. 
+:::

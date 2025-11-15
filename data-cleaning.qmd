@@ -3,3 +3,85 @@ title: Data Cleaning
 format: typst
 ---
 
+```{r}
+# read files 
+library(tidyverse)
+install.packages("readxl")
+library(readxl)
+precinct_votes <- read_csv("data/g24_sov_by_g24_svprec.csv")
+# COUNTY, FIPS, CDIST, TOTVOTE, DEMVOTE, REPVOTE, CNGDEM01, CNGDEM02, CNGREP01,, CNGREP02
+district_votes <- read_excel("data/g24-results-by-district.xlsx")
+candidates <- read_csv("data/g24-candidates-by-district.csv")
+```
+
+```{r}
+# Part 1
+# select columns from precinct votes that are needed
+precinct_votes <- precinct_votes|>
+    select("COUNTY", "FIPS", "CDDIST", "TOTVOTE", "DEMVOTE", "REPVOTE",, "CNGDEM01", "CNGDEM02", "CNGREP01", "CNGREP02")|>
+    drop_na()|> # remove NAs
+    mutate(CNGDEM01= as.numeric(CNGDEM01),CNGDEM02= as.numeric(CNGDEM02), CNGREP01= as.numeric(CNGREP01), CNGREP02= as.numeric(CNGREP02)) #convert columns into numeric
+
+colnames(district_votes) <- c("District", "Democrat", "Republican")
+district_votes <- district_votes |>
+    filter(Democrat == "DEM"| Republican == "REP"| District %in% c("District Totals", "Percent"))|> #only want rows that have DEM in the Democrat column, or REP in the Republican column, or District Totals/Percent in District column 
+    mutate(Democrat = str_replace_all(Democrat, "\\%", ""))|>
+    mutate(Republican = str_replace_all(Republican, "\\%", ""))
+    #filter(!(Democrat == "DEM" & Republican == "DEM")) #don't want districts who have both democrat candidates running 
+    #filter(!(Democrat == "REP" & Republican == "REP")) #don't want districts who have both republican candidates running 
+
+candidates <- candidates |>
+    mutate(DISTRICT = as.numeric(DISTRICT))|> #changed the district numbers so they are numeric 
+    mutate(DISTRICT_TYPE = factor(DISTRICT_TYPE))|> #changed sitrict type to a factor
+    mutate(NAME = str_replace_all(NAME, "\\*", "")) #removed the * 
+
+```
+
+
+```{r}
+#Part 5.5
+#reading all data 
+library(sf)
+SR_vote_data <- read_csv("../Downloads/data/SR_Precinct_Votes.csv")
+SR_shapefiles <- st_read("../Downloads/data/shapefiles/SR_precinct_shapefiles")
+redistrict_data <- st_read("../Downloads/data/shapefiles/redistrict")
+
+#cleaning and combining SR_vote_data & SR_shapefiles 
+join_data <- SR_vote_data|>
+    select("SRPREC_KEY", "CDDIST", "CNGDEM01", "CNGDEM02", "CNGREP01", "CNGREP02")|>
+    mutate(CNGDEM01 = str_replace_all(CNGDEM01, "[\\*]+", "0"), CNGDEM02 = str_replace_all(CNGDEM02, "[\\*]+", "0"), 
+    CNGREP01 = str_replace_all(CNGREP01, "[\\*]+", "0"), CNGREP02 = str_replace_all(CNGREP02, "[\\*]+", "0"))|> #convert * to 0
+    drop_na()|> # remove NAs
+    mutate(CNGDEM01= as.numeric(CNGDEM01), CNGDEM02= as.numeric(CNGDEM02), CNGREP01= as.numeric(CNGREP01), CNGREP02= as.numeric(CNGREP02))|> #convert columns into numeric
+    left_join(SR_shapefiles, by= join_by(SRPREC_KEY == SRPREC_KEY))|>
+    mutate(DEMVOTE = sum(CNGDEM01, CNGDEM02), REPVOTE = sum(CNGREP01, CNGREP02))
+
+#cleaning redistrict data 
+redistrict_data <- redistrict_data|>
+    select(DISTRICT, geometry)
+
+#convert to join_data to sf 
+join_data_sf <- st_sf(geometry = join_data$geometry, DEMVOTE= join_data$DEMVOTE, REPVOTE = join_data$REPVOTE)
+
+#plot geometries 
+# plot(st_geometry(join_data_sf))
+# plot(st_geometry(redistrict_data))
+
+#ensuring same crs/ projection
+join_data_sf <- join_data_sf |>
+    # st_transform(3310)|> # switch to equal area projection first
+    st_set_precision(1) |> # snap points to 1 m grid
+    st_make_valid() |> # fix self-intersections/bow-ties
+    st_collection_extract("POLYGON")
+
+redistrict_data$geometry <- redistrict_data$geometry |>
+    st_transform(3310) |> # switch to equal area projection first
+    st_set_precision(1) |> # snap points to 1 m grid
+    st_make_valid() |> # fix self-intersections/bow-ties
+    st_collection_extract("POLYGON")
+
+#area interpolate 
+interp <- st_interpolate_aw(join_data_sf, redistrict_data, extensive = TRUE)
+interp
+
+```

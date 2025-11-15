@@ -5,24 +5,58 @@ format: typst
 
 ### Question 1
 
-Put your question here.
+ How many precincts featured two candidates from the same party? 
 
 ### Answer 1
 
-Put your answer here.
+```{r}
+question_1 <- district_votes|>
+    filter((Democrat == "DEM" & Republican == "DEM"| Democrat == "REP" & Republican == "REP")) #districts who have both candidates from the same party running 
+
+nrow(question_1) 
+
+```
+
+4 districts had candidates running from the same party. 
 
 ### Question 2
 
-Put your question here.
+Which county had the greatest win? By how much?
 
 ### Answer 2
 
-Put your answer here.
+```{r}
+question_2 <- precinct_votes|>
+    group_by(COUNTY)|>
+    summarize(difference = sum(CNGDEM01, CNGDEM02) - sum(CNGREP01, CNGREP02))|>
+    mutate(difference = abs(difference))|>
+    arrange(desc(difference))|>
+    slice(1,)
+
+question_2
+```
+
+County 19 had the greatest difference in votes which was by 9143708. 
 
 ### Question 3
 
-Put your question here.
+Does the precinct votes when grouped together by district match the district votes? 
 
 ### Answer 3
 
-Put your answer here.
+
+```{r}
+new_district_votes <- district_votes|>
+    filter(!(Democrat == "DEM" & Republican == "DEM"))|> #don't want districts who have both democrat candidates running 
+    filter(!(Democrat == "REP" & Republican == "REP"))|> #don't want districts who have both republican candidates running 
+    filter(District == "District Totals")|> #only keep the district votes from each district |>
+    mutate(District = c(1:52)) #numbered rows to represent each district
+
+question_3 <- precinct_votes|>
+    group_by(CDDIST)|>
+    summarize(democrat_total = sum(CNGDEM01,CNGDEM02), republican_total = sum(CNGREP01,CNGREP02))|>
+    slice(-1)|> #remove District 0 which represents the total 
+    full_join(new_district_votes, by = join_by(CDDIST == District))
+```
+
+No they are off by a few digits.

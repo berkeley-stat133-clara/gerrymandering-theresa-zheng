@@ -5,7 +5,43 @@ format: typst
 
 ### 2024 Election Results and the 2024 District Map
 
+```{r}
+election_2024 <- precinct_votes|>
+    group_by(CDDIST)|>
+    drop_na()|>
+    summarize(total_dem = sum(CNGDEM01 + CNGDEM02), total_rep = sum(CNGREP01 + CNGREP02))|> #sum the total democratic and republican votes by district
+    slice(-1)
 
+
+#calculating mean_median score 
+mean_median_score <- election_2024|>
+    mutate(prop = total_dem/ sum(total_dem + total_rep))|>
+    summarize(mean_median = mean(prop) - median(prop))
+
+#calculating efficiency gap
+n_wasted <- function(by, against){
+    w_threshold <- floor((by +against)/2) +1 
+    n_wasted <- ifelse(by > against, by - w_threshold, by)
+    n_wasted 
+}
+
+election_2024 |>
+    mutate(
+    d_wasted = n_wasted(total_dem, total_rep), 
+    r_wasted = n_wasted(total_rep, total_dem)
+    ) |>
+    summarize(
+        total_d_wasted = sum(d_wasted), 
+        total_r_wasted = sum(r_wasted), 
+        total_votes = sum(total_dem, total_rep)
+    )|>
+    mutate(EG = (total_d_wasted - total_r_wasted)/total_votes )
+
+```
 
 ### 2024 Election Results and the proposed 2025 District Map
+
+```{r}
+
+```
 
