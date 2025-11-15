@@ -74,7 +74,6 @@ For the 2024 general election, calculate the mean-median score and efficiency ga
 Coming soon! See course website.
 
 \
-
 ### Part 6: Calculating Gerrymanding Again
 
 Return to `gerrymandering-metrics.qmd` and calculate the same two metrics using the same precinct-level election data from 2024 but the proposed district map of 2025.
