@@ -17,7 +17,7 @@ nrow(question_1)
 
 ```
 
-4 districts had candidates running from the same party. 
+Four districts had candidates running from the same party. 
 
 ### Question 2
 
